@@ -1,0 +1,304 @@
+---
+title: "Ngo Thi Minh Hanh"
+output: word_document
+date: "2025-04-10"
+---
+```{r}
+library(foreign)
+library(dynlm)
+library(sandwich)
+library(car)
+library(carData)
+library(zoo)
+library(ggplot2)
+library(forecast)
+library(tseries)
+library(urca)
+library(TTR) 
+library(Metrics)
+library(lmtest)
+library(tsutils)
+library(vars)
+library(readxl)
+library(urca)              
+```
+# I. Chuỗi Doanh_thu_SBT
+```{r}
+MH_data <- read_excel("D:/MH_data.xlsx")
+# Chuyển đổi dữ liệu thành chuỗi thời gian
+dtt <- ts(MH_data$dtt, start=c(2010,1), frequency=4)
+n <- length(dtt)
+# Tạo biến giả mùa vụ có cùng độ dài với dtt
+s1 <- rep(c(1,0,0,0), length.out=n)
+s2 <- rep(c(0,1,0,0), length.out=n)
+s3 <- rep(c(0,0,1,0), length.out=n)
+s4 <- rep(c(0,0,0,1), length.out=n)
+# Tạo biến xu thế thời gian có cùng độ dài
+time <- seq_along(dtt)
+# Kiểm tra lại độ dài các biến
+stopifnot(length(time) == length(s2), length(time) == length(s3), length(time) == length(s4), length(time) == length(dtt))
+# Vẽ dữ liệu gốc
+plot.ts(dtt)
+# Linear-linear
+plot(time, dtt)
+abline(lm(dtt ~ time))
+reg1 <- lm(dtt ~ time)
+summary(reg1)
+dttf1 <- ts(fitted(reg1), start=c(2010,1), frequency=4)
+plot.ts(dtt)
+lines(dttf1, col="red")
+forecast_reg1 <- predict(reg1, newdata=data.frame(time=seq(n+1, n+4, 1)), interval="confidence")
+# Linear-log
+reg2 <- lm(dtt ~ log(time))
+summary(reg2)
+dttf2 <- ts(fitted(reg2), start=c(2010,1), frequency=4)
+plot.ts(dtt)
+lines(dttf2, col="blue")
+forecast_reg2 <- predict(reg2, newdata=data.frame(time=seq(n+1, n+4, 1)), interval="confidence")
+# Log-linear
+reg3 <- lm(log(dtt) ~ time)
+summary(reg3)
+dttf3 <- ts(exp(fitted(reg3)), start=c(2010,1), frequency=4)
+plot.ts(dtt)
+lines(dttf3, col="green")
+forecast_reg3 <- exp(predict(reg3, newdata=data.frame(time=seq(n+1, n+4, 1)), interval="confidence"))
+# Log-log
+reg4 <- lm(log(dtt) ~ log(time))
+summary(reg4)
+dttf4 <- ts(exp(fitted(reg4)), start=c(2010,1), frequency=4)
+plot.ts(dtt)
+lines(dttf4, col="yellow")
+forecast_reg4 <- exp(predict(reg4, newdata=data.frame(time=seq(n+1, n+4, 1)), interval="confidence"))
+# Seasonality + Trend (Additive)
+reg5 <- lm(dtt ~ time + s2 + s3 + s4)
+summary(reg5)
+decom.dtt.a <- decompose(dtt, type="additive")
+plot(decom.dtt.a)
+forecast_reg5 <- predict(reg5, newdata=data.frame(time=seq(n+1, n+4, 1), s2=c(0,1,0,0), s3=c(0,0,1,0), s4=c(0,0,0,1)), interval="confidence")
+# Seasonality + Trend (Multiplicative)
+reg6 <- lm(dtt ~ time + time*s2 + time*s3 + time*s4)
+summary(reg6)
+decom.dtt.m <- decompose(dtt, type="multiplicative")
+plot(decom.dtt.m)
+forecast_reg6 <- predict(reg6, newdata=data.frame(time=seq(n+1, n+4, 1), s2=c(0,1,0,0), s3=c(0,0,1,0), s4=c(0,0,0,1)), interval="confidence")
+# Seasonality + Trend (Additive, Nonlinear)
+reg7 <- lm(log(dtt) ~ time + s2 + s3 + s4)
+summary(reg7)
+forecast_reg7 <- exp(predict(reg7, newdata=data.frame(time=seq(n+1, n+4, 1), s2=c(0,1,0,0), s3=c(0,0,1,0), s4=c(0,0,0,1)), interval="confidence"))
+# Seasonality + Trend (Multiplicative, Nonlinear)
+reg8 <- lm(log(dtt) ~ time + time*s2 + time*s3 + time*s4)
+summary(reg8)
+forecast_reg8 <- exp(predict(reg8, newdata=data.frame(time=seq(n+1, n+4, 1), s2=c(0,1,0,0), s3=c(0,0,1,0), s4=c(0,0,0,1)), interval="confidence"))
+# Holt-Winters Additive (Dự báo cho 4 quý năm 2024)
+dtt<-dtt[1:56]
+dtt<-ts(dtt,start=c(2010,1),frequency=4)
+hw.dtt.a<-HoltWinters(dtt,seasonal="a") #a=additive
+hw.dtt.a
+plot.ts(dtt)
+lines(fitted(hw.dtt.a)[,1],col="red")
+fs.a= forecast:::forecast.HoltWinters(hw.dtt.a, h=4)
+fs.a
+# Holt-Winters Multiplicative (Dự báo cho 4 quý năm 2024)
+hw.dtt.m<-HoltWinters(dtt,seasonal="m") #m=multiplicative
+hw.dtt.m
+plot.ts(dtt)
+lines(fitted(hw.dtt.m)[,1],col="red")
+fs.m= forecast:::forecast.HoltWinters(hw.dtt.m, h=8)
+fs.m
+# Tính MAPE và RMSE
+dtt_actual_2024 <- tail(MH_data$dtt, 4)
+mape_values <- list()
+rmse_values <- list()
+
+forecast_list <- list(forecast_reg1, forecast_reg2, forecast_reg3, forecast_reg4, forecast_reg5, forecast_reg6, forecast_reg7, forecast_reg8, fs.a$mean, fs.m$mean)
+names(forecast_list) <- c("Linear-Linear", "Linear-Log", "Log-Linear", "Log-Log", "Seasonality + Trend (Additive)", "Seasonality + Trend (Multiplicative)", "Seasonality + Trend (Additive, Nonlinear)", "Seasonality + Trend (Multiplicative, Nonlinear)", "Holt-Winters Additive", "Holt-Winters Multiplicative")
+
+for (name in names(forecast_list)) {
+  mape_values[[name]] <- mape(dtt_actual_2024, forecast_list[[name]])
+  rmse_values[[name]] <- rmse(dtt_actual_2024, forecast_list[[name]])
+}
+
+print("MAPE cho từng mô hình:")
+print(mape_values)
+print("RMSE cho từng mô hình:")
+print(rmse_values)
+# Vẽ đồ thị dự báo
+plot(fs.a, main="Dự báo Holt-Winters Additive cho năm 2024")
+plot(fs.m, main="Dự báo Holt-Winters Multiplicative cho năm 2024")
+# Holt-Winters Multiplicative (Dự báo cho 4 quý năm 2024 và 2025)
+hw.dtt.m <- HoltWinters(dtt, seasonal="m")
+fs.m <- forecast(hw.dtt.m, h=8)
+```
+# II. Chuỗi giá và log return của SBT
+```{r}
+stocksbt <- read_excel("D:/stocksbt.xlsx")
+attach(stocksbt)
+# vẽ đồ thị 
+## chuỗi 
+SBT<-stocksbt$SBT
+ggplot(stocksbt, aes(x = Date, y = SBT)) +
+  geom_line(color = "blue") +
+  labs(title = "Đồ thị chuỗi giá SBT theo ngày", x = "Ngày", y = "Giá SBT") +
+  theme_minimal()
+ggplot(stocksbt, aes(x = Date, y = `Logreturn`)) +
+  geom_line(color = "red") +
+  labs(title = "Log Return của SBT theo ngày", x = "Ngày", y = "Log Return (%)") +
+  theme_minimal()
+## chuỗi sai phân 
+plot.ts(diff(SBT), col = "red")
+```
+```{r}
+## chuỗi sai phân 
+dSBT <- diff(SBT)
+adf_trend <- ur.df(dSBT, type = "trend", lags = 1)
+summary(adf_trend)
+```
+```{r}
+adf_drift <- ur.df(dSBT, type = "drift", lags = 1)
+summary(adf_drift)
+```
+```{r}
+adf_none <- ur.df(dSBT, type = "none", lags = 1)
+summary(adf_none)
+```
+## 3. KD ADF cho chuỗi có xu thế
+```{r}
+# Price
+summary(ur.df(SBT, type="trend"))
+```
+
+```{r}
+# Log return
+summary(ur.df(Logreturn[2:498], type="trend"))
+```
+## 4. KD ADF cho chuỗi chỉ có hệ số chặn
+```{r}
+# Log return
+summary(ur.df(Logreturn[2:498], type="drift"))
+```
+## 5. KD ADF none
+```{r}
+# Log return
+summary(ur.df(Logreturn[2:498], type="none"))
+```
+## 6. Xem ACF, PACF của chuỗi sai phân, chuỗi Logreturn
+```{r}
+acf(diff(SBT))
+pacf(diff(SBT))
+```
+```{r}
+acf(Logreturn[2:498])
+pacf(Logreturn[2:498])
+```
+### 6.1 UL mô hình ARIMA
+```{r}
+#chuoigia
+reg.SBT.arima511 <- Arima(SBT, order = c(5,1,1), include.constant = TRUE)
+summary(reg.SBT.arima511)
+reg.SBT.arima313 <- Arima(SBT, order = c(3,1,3), include.constant = TRUE)
+summary(reg.SBT.arima313)
+```
+```{r}
+#chuoiLogreturn
+# ARIMA(1,0,0)
+reg.log.arima101 <- Arima(Logreturn[2:498], order = c(1,0,1))
+summary(reg.log.arima101)
+# ARIMA(1,0,1)
+reg.log.arima100 <- Arima(Logreturn[2:498], order = c(1,0,0))
+summary(reg.log.arima100)
+```
+### 6.2 Xem tính dừng qua nghiệm nghịch đảo
+```{r}
+#chuoigia
+autoplot(reg.SBT.arima511)
+autoplot(reg.SBT.arima313)
+```
+```{r}
+#chuoilogreturn
+autoplot(reg.log.arima100)
+autoplot(reg.log.arima101)
+```
+### 6.3 Kiểm định tính nhiễu trắng của phần dư
+```{r}
+#chuoigia
+checkresiduals(reg.SBT.arima511)
+checkresiduals(reg.SBT.arima313)
+```
+```{r}
+#chuoiLogreturn
+checkresiduals(reg.log.arima100)
+checkresiduals(reg.log.arima101)
+```
+### 6.4 Dự báo price, logreurn
+```{r}
+#chuoigia
+pricef.arima511 <- forecast(reg.SBT.arima511,h=10)
+pricef.arima511
+pricef.arima313 <- forecast(reg.SBT.arima313,h=10)
+pricef.arima313
+```
+```{r}
+#chuoilogreturn
+logf.arima100<-forecast(reg.log.arima100,h=10)
+logf.arima100
+logf.arima101<-forecast(reg.log.arima101,h=10)
+logf.arima101
+```
+#### Tính sai số 
+```{r}
+actual <- c(12850, 12550, 12150, 12150, 12300, 12600, 11700, 11800, 11800, 11850)
+arima_511 <- c(11800, 11783, 11770, 11761, 11755, 11750, 11746, 11742, 11739, 11737)
+arima_313 <- c(11800, 11789, 11776, 11765, 11757, 11752, 11747, 11742, 11738, 11736)
+# Tính RMSE và MAPE
+rmse_511 <- rmse(actual, arima_511)
+mape_511 <- mape(actual, arima_511) * 100
+rmse_313 <- rmse(actual, arima_313)
+mape_313 <- mape(actual, arima_313) * 100
+```
+```{r}
+# Dự báo log return từ 2 mô hình ARIMA
+log_return_arima_100 <- c(-0.006779, -0.006560, -0.006567, -0.006567, -0.006567,
+                          -0.006567, -0.006567, -0.006567, -0.006567, -0.006567)
+log_return_arima_101 <- c(0.004338, -0.014169, -0.001375, -0.010219, -0.004105,
+                          -0.008332, -0.005410, -0.007430, -0.006033, -0.006999)
+# Giá thực tế ngày 31/12/2024
+start_price <- 11818.3
+# Tính giá dự báo từ log return
+price_arima_100 <- numeric(length(log_return_arima_100))
+price_arima_101 <- numeric(length(log_return_arima_101))
+price_arima_100[1] <- start_price * exp(log_return_arima_100[1])
+price_arima_101[1] <- start_price * exp(log_return_arima_101[1])
+# Lặp để tính các phiên tiếp theo
+for (i in 2:length(log_return_arima_100)) {
+  price_arima_100[i] <- price_arima_100[i-1] * exp(log_return_arima_100[i])
+  price_arima_101[i] <- price_arima_101[i-1] * exp(log_return_arima_101[i])
+}
+
+# In kết quả
+predicted_prices <- data.frame(
+  Session = 1:10,
+  Price_ARIMA_100 = round(price_arima_100, 2),
+  Price_ARIMA_101 = round(price_arima_101, 2)
+)
+print(predicted_prices)
+
+```
+```{r}
+# Giá thực tế
+actual <- c(12850, 12550, 12150, 12150, 12300, 12600, 11700, 11800, 11800, 11850)
+
+# Giá dự báo từ 2 mô hình
+pred_arima_100 <- c(11738, 11661, 11585, 11509, 11434, 11359, 11285, 11211, 11137, 11064)
+pred_arima_101 <- c(11869, 11702, 11686, 11567, 11520, 11424, 11363, 11279, 11211, 11133)
+# RMSE function
+rmse <- function(actual, predicted) {
+  sqrt(mean((actual - predicted)^2))
+}
+# Tính RMSE
+rmse_arima_100 <- rmse(actual, pred_arima_100)
+rmse_arima_101 <- rmse(actual, pred_arima_101)
+```
+
+
+
+

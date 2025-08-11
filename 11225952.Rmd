@@ -1,0 +1,334 @@
+---
+title: "LSS"
+author: "wmwt"
+date: "2025-02-10"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(ggplot2)
+library(TTR)
+library(tseries)
+library(Hmisc)
+library(urca)
+library(forecast)
+library(zoo)
+library(Metrics)
+library(car)
+library(lmtest)
+library(tsutils)
+
+```
+
+```{r}
+library(readxl)
+Data_Stock_LSS <- read_excel("D:/Download/Data Stock LSS.xlsx")
+attach(Data_Stock_LSS)
+```
+
+```{r}
+#Chuỗi tài chinh: doanh thu
+ts(Data_Stock_LSS, start = c(2010,1), frequency = 4)
+LSS <- ts(LSS, start = c(2010,1), frequency = 4)
+LSS.train <- ts(LSS[1:56], start = c(2010,1), frequency = 4)  
+LSS.test <- ts(LSS[57:60], start = c(2024,1), frequency = 4) 
+```
+
+```{r}
+plot(LSS)
+```
+
+```{r}
+#Định dạng số liệu thời gian
+time <- seq_along(LSS)
+summary(time)
+time.train <- seq_along(LSS.train)
+```
+
+```{r}
+#Mô hình 1: Lin-lin
+df_train <- data.frame(LSS.train, time.train)
+linlin <- lm(LSS.train ~ time.train, data = df_train)
+summary(linlin)
+```
+
+```{r}
+#Lin-lin: RMSE, MAPE toàn mẫu đến 2023Q4
+rmse(LSS.train,fitted(linlin))
+mape(LSS.train,fitted(linlin))
+```
+```{r}
+#Lin-lin: RMSE, MAPE cho forecast 2024Q1 đến 2024Q4
+df_new <- data.frame(time.train = c(57, 58, 59, 60))
+rmse(LSS.test,predict(linlin, newdata=df_new))
+mape(LSS.test,predict(linlin, newdata=df_new))
+```
+
+```{r}
+#Mô hình 2: Lin-log
+linlog<-lm(LSS.train~log(time.train),data = df_train)
+summary(linlog)
+
+#Lin-log: RMSE, MAPE toàn mẫu đến 2023Q4
+rmse(LSS.train,fitted(linlog))
+mape(LSS.train,fitted(linlog))
+
+#Lin-log: RMSE, MAPE cho forecast 2024Q1 đến 2024Q4
+rmse(LSS.test,predict(linlog, newdata=df_new))
+mape(LSS.test,predict(linlog, newdata=df_new))
+```
+```{r}
+#Mô hình 3: Log-lin
+loglin<-lm(log(LSS.train)~time.train)
+summary(loglin)
+
+#Log-lin: RMSE, MAPE toàn mẫu đến 2023Q4
+rmse(LSS.train,exp(fitted(loglin)))
+mape(LSS.train,exp(fitted(loglin)))
+
+#Log-lin: RMSE, MAPE cho forecast 2024Q1 đến 2024Q4
+rmse(LSS.test,exp(predict(loglin, newdata=df_new)))
+mape(LSS.test,exp(predict(loglin, newdata=df_new)))
+```
+
+```{r}
+#Mô hình 4: Log-log
+loglog<-lm(log(LSS.train)~log(time.train))
+summary(loglog)
+
+#Log-log: RMSE, MAPE toàn mẫu đến 2023Q4
+rmse(LSS.train,exp(fitted(loglog)))
+mape(LSS.train,exp(fitted(loglog)))
+
+#Log-log: RMSE, MAPE cho forecast 2024Q1 đến 2024Q4
+rmse(LSS.test,exp(predict(loglog, newdata=df_new)))
+mape(LSS.test,exp(predict(loglog, newdata=df_new)))
+```
+
+```{r}
+#Tạo biến giả mùa vụ theo quý
+s1 <- c(rep(c(1,0,0,0), 14))				
+s2 <- c(rep(c(0,1,0,0), 14))
+s3 <- c(rep(c(0,0,1,0), 14))
+s4 <- c(rep(c(0,0,0,1), 14))
+```
+
+```{r}
+#Mô hình 5: Linear trend + Additive
+df_train <- data.frame(LSS.train, time.train, s1, s2, s3, s4)
+linadd <- lm(LSS.train ~ time.train + s2 + s3 + s4, data = df_train)
+summary(linadd)
+
+#Lin-add: RMSE, MAPE toàn mẫu đến 2023Q4
+rmse(LSS.train,fitted(linadd))
+mape(LSS.train,fitted(linadd))
+
+#Lin-add: RMSE, MAPE cho forecast 2024Q1 đến 2024Q4
+df_new2 <- data.frame(time.train = c(57, 58, 59, 60), s2 = c(0,1,0,0), s3 = c(0,0,1,0), s4 = c(0,0,0,1))
+rmse(LSS.test,predict(linadd, newdata=df_new2))
+mape(LSS.test,predict(linadd, newdata=df_new2))
+```
+```{r}
+#Mô hình 6: Linear trend + Multiplicative
+linmul<-lm(LSS.train ~ time.train + time.train*s2+ time.train*s3+ time.train*s4, data = df_train)
+summary(linmul)
+
+#Lin-mul: RMSE, MAPE toàn mẫu đến 2023Q4
+rmse(LSS.train,fitted(linmul))
+mape(LSS.train,fitted(linmul))
+
+#Lin-mul: RMSE, MAPE cho forecast 2024Q1 đến 2024Q4
+rmse(LSS.test,predict(linmul, newdata=df_new2))
+mape(LSS.test,predict(linmul, newdata=df_new2))
+```
+
+
+```{r}
+#Mô hình 7: Holt-Winter + Additive
+hw.lss.a <- HoltWinters(LSS.train, seasonal = "a") 
+hw.lss.a
+
+#HW-add: RMSE toàn mẫu đến 2023Q4
+rmse(LSS.train,fitted(hw.lss.a))
+
+#HW-add: RMSE cho forecast 2024Q1 đến 2024Q4
+library(forecast)
+forecast_hw.a <- forecast(hw.lss.a, h = 4)
+rmse(LSS.test, forecast_hw.a$mean)
+```
+
+```{r}
+#Mô hình 8: Holt-Winter + Multiplicative
+hw.lss.m <- HoltWinters(LSS.train, seasonal = "m")		# m = multiplicative
+hw.lss.m
+
+#HW-mul: RMSE toàn mẫu đến 2023Q4
+rmse(LSS.train,fitted(hw.lss.m))
+
+#HW-mul: RMSE cho forecast 2024Q1 đến 2024Q4
+library(forecast)
+forecast_hw.m <- forecast(hw.lss.m, h = 4)
+rmse(LSS.test, forecast_hw.m$mean)
+```
+
+```{r}
+#Dựa vào RMSE cho 2024Q1 đến 2024Q4: Chọn mô hình Holt_Winter Multiplicative
+#With data to 2024Q4, forecast for 2025
+hw.lss.m.2 <- HoltWinters(LSS, seasonal = "m")		# m = multiplicative
+hw.lss.m.2
+forecast_hw.m <- forecast(hw.lss.m.2, h = 4)
+forecast_hw.m
+```
+
+
+```{r}
+plot.ts(LSS)
+lines(fitted(hw.lss.m.2)[,1], col = "red")
+
+```
+
+```{r}
+library(readxl)
+LSS.data <- read_excel("D:/Download/Time Series - Group.xlsx", 
+    sheet = "LSSweight")
+attach(LSS.data)
+```
+
+```{r}
+#Chuỗi log-return
+library(tseries)
+library(urca)
+library(zoo)
+rLSS <- ts(logLSS, start = c(2023, 1), frequency = 1)
+```
+
+```{r}
+plot(rLSS)
+```
+
+
+```{r}
+#Chuỗi log-return
+#Kiểm định Dickey-Fuller: không có hệ số chặn (none)
+summary(ur.df(rLSS,type = "none",lag = 0))
+```
+
+```{r}
+#Chuỗi log-return
+#Kiểm định Dickey-Fuller: có hệ số chặn (drift)
+summary(ur.df(rLSS,type = "drift",lag = 0))
+```
+
+```{r}
+#Chuỗi log-return
+#Kiểm định Dickey-Fuller: có xu thế (trend)
+summary(ur.df(rLSS,type = "trend",lag = 0))
+```
+
+```{r}
+#Chuỗi log-return
+#Xác định bậc AR-MA
+acf(rLSS)
+pacf(rLSS)
+```
+
+```{r}
+Box.test(rLSS, lag = 20, type = "Ljung-Box")
+```
+
+```{r}
+#Chuỗi log-return
+#Mô hình ARMA(1,1): hàm Arima
+reg.arima101<- Arima(rLSS,order = c(1,0,0))
+reg.arima101
+```
+
+```{r}
+library(ggplot2)
+autoplot(reg.arima101)
+```
+
+
+```{r}
+#Chuỗi log-return
+#Kiểm định đánh giá phần dư
+library(forecast) 
+checkresiduals(reg.arima101)
+```
+
+```{r}
+#Chuỗi log-return
+#Forecast từ mô hình ARIMA(5,0,0)
+usaf.arima101 <-forecast(reg.arima101)
+usaf.arima101
+```
+
+
+```{r}
+library(readxl)
+LSS.price <- read_excel("D:/Download/Time Series - Group.xlsx", 
+    sheet = "Tham số cơ bản")
+attach(LSS.price)
+```
+
+```{r}
+#Chuỗi giá
+LSS.pri<-LSS.price$LSS.pri
+LSS.pr <- ts(LSS.pri, start = c(2023, 1), frequency = 1)
+```
+
+```{r}
+plot(LSS.pr)
+```
+
+
+```{r}
+#Chuỗi giá
+#Kiểm định Dickey-Fuller: không có hệ số chặn (none)
+summary(ur.df(LSS.pr,type = "none",lag = 0))
+```
+
+```{r}
+#Chuỗi giá
+#Kiểm định Dickey-Fuller: có hệ số chặn (drift)
+summary(ur.df(LSS.pr,type = "drift",lag = 0))
+```
+
+```{r}
+#Chuỗi giá
+#Kiểm định Dickey-Fuller: có xu thế (trend)
+summary(ur.df(LSS.pr,type = "trend",lag = 0))
+```
+
+```{r}
+#Chuỗi giá
+#Xác định bậc AR-MA
+acf(LSS.pr)
+pacf(LSS.pr)
+#Hình dạng: AR(1)
+```
+
+```{r}
+#Chuỗi giá
+#Mô hình ARIMA (1,0,0)
+reg.arima100<- Arima(LSS.pr,order = c(1,0,0))
+reg.arima100
+```
+
+```{r}
+checkresiduals(reg.arima100)
+```
+
+
+```{r}
+#Chuỗi giá
+#Forecast từ mô hình ARIMA(1,0,0)
+usaf.arima100 <-forecast(reg.arima100)
+usaf.arima100
+```
+
+

@@ -1,0 +1,258 @@
+---
+title: "Bài tập nhóm Time Series"
+author: "Nhóm 9"
+date: "2025-04-11"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+TẢI THƯ VIỆN
+```{r}
+library(readxl)
+library(forecast)
+library(urca)
+library(tseries)
+library(vars)
+library(Metrics)
+```
+DỰ BÁO CHUỖI LỢI SUÂT PORTFOLIO BẰNG DỮ LIỆU TỪ CHÍNH CHUỖI NÀY
+```{r}
+rPortfolio <- read_excel("Min_var.xlsx", sheet = "Forecast", range = "I1:I499")[[1]]
+```
+
+```{r}
+plot(rPortfolio, type="l", xlab = "Time")
+```
+KIỂM ĐỊNH ADF
+```{r}
+summary(ur.df(rPortfolio,type = "trend", selectlags = "AIC"))
+```
+```{r}
+summary(ur.df(rPortfolio,type = "drift", selectlags = "AIC"))
+```
+```{r}
+summary(ur.df(rPortfolio,type = "none", selectlags = "AIC"))
+```
+MÔ HÌNH ARIMA
+```{r}
+Acf(rPortfolio)
+```
+```{r}
+Pacf(rPortfolio)
+```
+```{r}
+Box.test(rPortfolio, lag = 20, type = "Ljung-Box")
+```
+```{r}
+arma11 = Arima(rPortfolio, order = c(1,0,1), include.constant = 0)
+summary(arma11)
+```
+```{r}
+autoplot(arma11)
+```
+```{r}
+checkresiduals(arma11)
+```
+
+```{r}
+forecast(arma11, h=10)$mean
+```
+
+KIỂM ĐỊNH ĐỒNG TÍCH HỢP
+```{r}
+stock <- read_excel("D:/Time Series/Min_var.xlsx", range = "A1:D500")
+```
+
+```{r}
+attach(stock)
+```
+
+```{r}
+stock$DIG = stock$DIG*1000
+```
+
+```{r}
+summary(ca.jo(data.frame(SBT, DIG, VIC),type = "trace"))
+```
+```{r}
+summary(ca.jo(data.frame(SBT, DIG, VIC),type = "eigen"))
+```
+```{r}
+summary(ca.jo(data.frame(DIG, VIC),type = "trace"))
+```
+```{r}
+summary(ca.jo(data.frame(DIG, VIC),type = "eigen"))
+```
+
+
+
+
+
+MÔ HÌNH VAR
+```{r}
+stock1 <- read_excel("D:/Time Series/Min_var.xlsx", range = "F2:I500")
+```
+```{r}
+r2025 <- read_excel("Min_var.xlsx", sheet = "2025", range = "F1:I12")[-1,]
+```
+```{r}
+attach(stock1)
+```
+```{r}
+VARselect(stock1)
+```
+
+```{r}
+var1 = VAR(stock1, p=1, type = "const")
+summary(var1)
+```
+```{r}
+serial.test(var1)
+```
+```{r}
+forecast1 = predict(var1, n.ahead = 10)
+```
+
+```{r all_forecasts_plot_with_visible_2025, fig.width=10, fig.height=12}
+layout(matrix(1:5, ncol = 1), heights = c(1, 1, 1, 1, 0.3))
+
+# Tăng khoảng trắng phía trên (top margin)
+par(mar = c(4, 4, 4.5, 2))  # top margin = 4.5 (default thường là 3-4)
+
+vars_to_plot <- c("rSBT", "rDIG", "rVIC", "rLSS")
+
+for (varname in vars_to_plot) {
+  fc <- forecast1$fcst[[varname]]
+  
+  # Actual data + r2025
+  actual <- c(tail(stock1[[varname]], 120), head(r2025[[varname]], 10))
+  total_len <- length(actual)
+  
+  time_index <- 380:(380 + total_len - 1)  # 380 to 509
+  
+  forecast_values <- fc[, "fcst"]
+  lower <- fc[, "lower"]
+  upper <- fc[, "upper"]
+  
+  # Plot
+  plot(x = time_index, y = actual, type = "l", col = "black", lwd = 2,
+       ylim = range(c(actual, lower, upper)),
+       ylab = varname, main = paste("Forecast vs Actual -", varname),
+       xlab = "Time")
+  
+  # Forecast line
+  lines(time_index[(total_len - 9):total_len], forecast_values, col = "blue", lty = 2, lwd = 2)
+  
+  # Confidence intervals
+  lines(time_index[(total_len - 9):total_len], lower, col = "red", lty = 3)
+  lines(time_index[(total_len - 9):total_len], upper, col = "red", lty = 3)
+  
+  # Vertical line
+  forecast_start_time <- time_index[total_len - 9]  # = 500
+  abline(v = forecast_start_time, col = "purple", lty = 2)
+  
+  # "2025" label in margin top (side 3)
+  mtext("2025", side = 3, line = 0.5, at = forecast_start_time, cex = 0.9, col = "black")
+
+}
+
+# Legend
+par(mar = c(0, 0, 0, 0))
+plot.new()
+legend("center", legend = c("Actual", "Forecast", "95% CI"), 
+       col = c("black", "blue", "red"), 
+       lty = c(1, 2, 3), lwd = c(2, 2, 1),
+       horiz = TRUE, bty = "n", cex = 1.2)
+
+
+```
+DỰ BÁO CHO 4 CHUỖI LỢI SUẤT VÀ SO SÁNH VỚI GIÁ TRỊ THỰC TẾ
+```{r}
+forecast1$fcst$rSBT[,1]
+rmse(r2025$rSBT, forecast1$fcst$rSBT[,1])
+```
+```{r}
+forecast1$fcst$rDIG[,1]
+rmse(r2025$rDIG, forecast1$fcst$rDIG[,1])
+```
+```{r}
+forecast1$fcst$rVIC[,1]
+rmse(r2025$rVIC, forecast1$fcst$rVIC[,1])
+```
+```{r}
+forecast1$fcst$rLSS[,1]
+rmse(r2025$rLSS, forecast1$fcst$rLSS[,1])
+```
+
+HÀM PHẢN ỨNG
+```{r}
+irf_result <- irf(var1)
+irf_result
+```
+```{r}
+impulses <- irf_result$impulse
+responses <- irf_result$response
+horizon <- nrow(irf_result$irf[[1]])
+
+par(mfrow = c(2, 2), mar = c(4, 4, 2, 1))  # 2x2 grid, nice margins
+
+for (imp in impulses) {
+  for (resp in responses) {
+    main_title <- paste("Impulse:", imp, "→ Response:", resp)
+    
+    irf_vals <- irf_result$irf[[imp]][, resp]
+    lower <- irf_result$Lower[[imp]][, resp]
+    upper <- irf_result$Upper[[imp]][, resp]
+    
+    ts.plot(irf_vals, col = "blue", ylim = range(c(lower, upper)),
+            main = main_title, ylab = "Response", xlab = "Horizon")
+    axis(1, at = 1:10)
+    lines(lower, col = "red", lty = 2)
+    lines(upper, col = "red", lty = 2)
+    abline(h = 0, col = "gray")
+  }
+}
+```
+
+
+PHÂN RÃ PHƯƠNG SAI
+```{r}
+fevd(var1)
+```
+```{r}
+fevd_result <- fevd(var1)
+contrib_names <- colnames(stock1)
+colors <- c("lightblue", "lightgreen", "lightpink", "lightyellow")
+
+# Vẽ từng đồ thị riêng, legend nằm bên ngoài
+for (v in names(fevd_result)) {
+  mat <- t(fevd_result[[v]])
+  rownames(mat) <- contrib_names[1:nrow(mat)]
+
+  # Tăng lề bên phải để chứa legend
+  par(mar = c(5, 4, 4, 8), xpd = TRUE)  # xpd = TRUE cho phép vẽ legend ngoài vùng plot
+
+  barpos <- barplot(mat,
+                    beside = FALSE,
+                    col = colors[1:nrow(mat)],
+                    main = paste("FEVD for", v),
+                    xlab = "Horizon",
+                    ylab = "Percentage",
+                    xaxt = "n")
+
+  axis(1, at = barpos, labels = 1:ncol(mat))
+
+  # Legend bên phải, ra ngoài vùng plot
+  legend("topright",
+         inset = c(-0.25, 0),
+         legend = rownames(mat),
+         fill = colors[1:nrow(mat)],
+         bty = "n")
+}
+
+
+```
+
+

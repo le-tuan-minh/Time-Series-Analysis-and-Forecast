@@ -1,0 +1,423 @@
+---
+title: "Bài tập cá nhân Time Series"
+author: "Lê Tuấn Minh - 11224210"
+date: "2025-04-09"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+setwd("D:/Time Series")
+library(readxl)
+library(Metrics)
+library(forecast)
+library(urca)
+library(tseries)
+```
+
+
+```{r}
+dat = read_excel("Vingroup JSC Stock Price History.xlsx", sheet = "Sheet1", range = "C1:C61")
+attach(dat)
+```
+
+#Dự báo cho chuỗi tài chính
+```{r}
+dat = ts(dat, start = c(2010,1), frequency = 4)
+time = seq_along(dat)
+t = head(time, -4)
+t2 = tail(time, 4)
+Revenue = ts(Revenue, start = c(2010, 1), frequency = 4)
+plot.ts(Revenue, type = 'l')
+```
+
+```{r}
+train_dat = dat[1:(length(dat)-4)]
+val_dat = dat[(length(dat)-3):length(dat)]
+rev1 = ts(train_dat, start = c(2010,1), frequency = 4)
+rev = ts(dat, start = c(2010, 1), frequency = 4)
+```
+
+```{r}
+s1 <- c(rep(c(1,0,0,0), 14))				
+s2 <- c(rep(c(0,1,0,0), 14))
+s3 <- c(rep(c(0,0,1,0), 14))
+s4 <- c(rep(c(0,0,0,1), 14))
+
+```
+
+```{r}
+reg_lin_lin = lm(rev1 ~ t)
+summary(reg_lin_lin)
+```
+
+```{r}
+reg_lin_log = lm(rev1~log(t))
+summary(reg_lin_log)
+```
+
+```{r}
+reg_log_lin = lm(log(rev1)~t)
+summary(reg_log_lin)
+```
+
+```{r}
+reg_log_log = lm(log(rev1)~log(t))
+summary(reg_log_log)
+```
+
+```{r}
+reg_add = lm(rev1~t+s2+s3+s4)
+summary(reg_add)
+```
+
+```{r}
+reg_mul = lm(rev1 ~ t + t*s2 + t*s3+ t*s4)
+summary(reg_mul)
+```
+
+```{r}
+reg_add1 = lm(log(rev1)~t+s2+s3+s4)
+summary(reg_add1)
+```
+
+```{r}
+reg_mul1 = lm(log(rev1) ~ t + t*s2 + t*s3+ t*s4)
+summary(reg_mul1)
+```
+
+```{r}
+# 1. Create prediction dataframe
+df <- data.frame(
+  t = 57:60,
+  s2 = c(0, 1, 0, 0),
+  s3 = c(0, 0, 1, 0),
+  s4 = c(0, 0, 0, 1)
+)
+
+# 2. Real validation data
+actuals <- val_dat
+
+# 3. List of models
+models <- list(
+  reg_lin_lin = reg_lin_lin,
+  reg_lin_log = reg_lin_log,
+  reg_log_lin = reg_log_lin,
+  reg_log_log = reg_log_log,
+  reg_add = reg_add,
+  reg_mul = reg_mul,
+  reg_add1 = reg_add1,
+  reg_mul1 = reg_mul1
+)
+
+# 4. Predict and evaluate
+results <- data.frame(Model = character(), RMSE = numeric(), MAPE = numeric())
+
+for (model_name in names(models)) {
+  model <- models[[model_name]]
+  
+  # Predict
+  preds <- predict(model, newdata = df)
+  
+  # Back-transform if model is on log scale
+  if (model_name %in% c("reg_log_lin", "reg_log_log", "reg_add1", "reg_mul1")) {
+  preds <- exp(preds)
+}
+  
+  # Evaluate
+  model_rmse <- rmse(actuals, preds)
+  model_mape <- mape(actuals, preds)
+  
+  # Append to results
+  results <- rbind(results, data.frame(
+    Model = model_name,
+    RMSE = model_rmse,
+    MAPE = model_mape
+  ))
+}
+
+# 5. Show results
+print(results)
+```
+
+```{r}
+hw.rev.a = HoltWinters(rev1, seasonal = 'a')
+hw.rev.a
+```
+
+
+```{r}
+pred = forecast(hw.rev.a, h = 4)
+rmse(pred$mean, val_dat)
+mape(pred$mean, val_dat)
+```
+```{r}
+hw.rev.a1 = HoltWinters(log(rev1), seasonal = 'a')
+hw.rev.a1
+```
+
+
+```{r}
+pred = forecast(hw.rev.a1, h = 4)
+rmse(exp(pred$mean), val_dat)
+mape(exp(pred$mean), val_dat)
+```
+```{r}
+hw.rev.m = HoltWinters(rev1, seasonal = 'm')
+hw.rev.m
+```
+
+
+```{r}
+pred = forecast(hw.rev.m, h = 4)
+rmse(pred$mean, val_dat)
+mape(pred$mean, val_dat)
+```
+```{r}
+hw.rev.m1 = HoltWinters(log(rev1), seasonal = 'm')
+hw.rev.m1
+```
+
+
+```{r}
+pred = forecast(hw.rev.m1, h = 4)
+rmse(exp(pred$mean), val_dat)
+mape(exp(pred$mean), val_dat)
+```
+```{r}
+hw.rev.a_2024 = HoltWinters(log(rev), seasonal = 'a')
+hw.rev.a_2024
+```
+```{r}
+pred = forecast(hw.rev.a_2024, 4)
+
+# Exponentiate forecast components
+pred_exp <- pred  # Make a copy first
+pred_exp$mean <- exp(pred$mean)
+pred_exp$lower <- exp(pred$lower)
+pred_exp$upper <- exp(pred$upper)
+
+# Optionally, exponentiate fitted values too
+pred_exp$fitted <- exp(pred$fitted)
+
+# Print the exponentiated forecast
+print(pred_exp)
+```
+```{r}
+# Combine actual and forecasted mean into one ts object
+combined_series <- ts(c(rev, pred_exp$mean),
+                      start = start(rev),
+                      frequency = frequency(rev))
+
+# Get forecast start time
+forecast_start <- time(rev)[length(rev)] + 1/frequency(rev)
+forecast_time <- time(ts(pred_exp$mean, start = forecast_start, frequency = frequency(rev)))
+
+# Calculate y-axis limits to include everything
+y_max <- max(c(rev, pred_exp$mean, pred_exp$upper[,1]), na.rm = TRUE)
+y_min <- min(c(rev, pred_exp$mean, pred_exp$lower[,1]), na.rm = TRUE)
+
+# Plot the actual + forecasted series
+plot.ts(combined_series, col = "blue", ylab = "Revenue",
+        ylim = c(y_min, y_max))
+
+# Add fitted values
+lines(pred_exp$fitted, col = "red", lwd = 2)
+
+# Add forecasted mean
+lines(ts(pred_exp$mean, start = forecast_start, frequency = frequency(rev)),
+      col = "darkgreen", lwd = 2)
+
+# Add shaded confidence interval
+polygon(c(forecast_time, rev(forecast_time)),
+        c(pred_exp$lower[,1], rev(pred_exp$upper[,1])),
+        col = rgb(0.6, 0.6, 0.6, 0.4), border = NA)
+
+# Add legend
+legend("topleft",
+       legend = c("Actual", "Fitted", "Forecast", "80% CI"),
+       col = c("blue", "red", "darkgreen", rgb(0.6, 0.6, 0.6, 0.4)),
+       lty = c(1, 1, 1, NA),
+       lwd = c(2, 2, 2, NA),
+       pch = c(NA, NA, NA, 15),
+       pt.cex = 2,
+       bty = "n")
+```
+
+
+
+
+
+
+
+
+
+#Chuỗi giá
+```{r}
+VIC <- read_excel("Vingroup JSC Stock Price History.xlsx")
+r.actual = read_excel("Min_var.xlsx", sheet = "2025", range = "H3:H12", col_names = FALSE)[[1]]
+```
+
+```{r}
+attach(VIC)
+```
+
+```{r}
+`Log_return%` = `Log_return%`[-1]
+```
+
+```{r}
+plot(Price, type = "l", xlab = "Time")
+```
+```{r}
+plot(`Log_return%`,type="l", xlab = "Time")
+```
+Kiểm định ADF chuỗi log return
+```{r}
+summary(ur.df(`Log_return%`,type = "trend", selectlags = "AIC"))
+```
+```{r}
+summary(ur.df(`Log_return%`,type = "drift", selectlags = "AIC"))
+```
+```{r}
+summary(ur.df(`Log_return%`,type = "none", selectlags = "AIC"))
+```
+Các mô hình với chuỗi log return
+```{r}
+Acf(`Log_return%`)
+```
+```{r}
+Pacf(`Log_return%`)
+```
+```{r}
+r_ar1 = Arima(`Log_return%`, order = c(1,0,0), include.constant = 0)
+summary(r_ar1)
+```
+```{r}
+r_ma1 = Arima(`Log_return%`, order = c(0,0,1), include.constant = 0)
+summary(r_ma1)
+```
+```{r}
+r_ar1ma1 = Arima(`Log_return%`, order = c(1,0,1), include.constant = 0)
+summary(r_ar1ma1)
+```
+
+```{r}
+autoplot(r_ar1)
+```
+```{r}
+autoplot(r_ma1)
+```
+```{r}
+autoplot(r_ar1ma1)
+```
+
+```{r}
+checkresiduals(r_ar1)
+```
+```{r}
+checkresiduals(r_ma1)
+```
+```{r}
+checkresiduals(r_ar1ma1)
+```
+
+
+
+
+Kiểm định chuỗi giá và chuỗi sai phân của chuỗi giá
+
+```{r}
+summary(ur.df(Price,type = "trend", selectlags = "AIC"))
+```
+```{r}
+summary(ur.df(diff(Price),type = "trend", selectlags = "AIC"))
+```
+```{r}
+summary(ur.df(diff(Price),type = "drift",selectlags = "AIC"))
+```
+```{r}
+summary(ur.df(diff(Price),type = "none",selectlags = "AIC"))
+```
+```{r}
+plot(diff(Price), type ="l", xlab = "Time")
+```
+Các mô hình với chuỗi giá
+```{r}
+Acf(diff(Price))
+```
+```{r}
+Pacf(diff(Price))
+```
+```{r}
+p_arima113 = Arima(Price, order = c(1,1,3), include.constant = 0)
+summary(p_arima113)
+```
+```{r}
+p_arima311 = Arima(Price, order = c(3,1,1), include.constant = 0)
+summary(p_arima311)
+```
+```{r}
+p_arima313 = Arima(Price, order = c(3,1,3), include.constant = 0)
+summary(p_arima313)
+```
+
+```{r}
+autoplot(p_arima113)
+```
+```{r}
+autoplot(p_arima311)
+```
+```{r}
+autoplot(p_arima313)
+```
+
+```{r}
+checkresiduals(p_arima113)
+```
+```{r}
+checkresiduals(p_arima311)
+```
+```{r}
+checkresiduals(p_arima313)
+```
+
+
+Tính sai số dự báo của các mô hình trên
+```{r}
+forecast(r_ar1, h=10)$mean
+rmse(r.actual, forecast(r_ar1, h=10)$mean)
+```
+```{r}
+forecast(r_ma1, h=10)$mean
+rmse(r.actual, forecast(r_ma1, h=10)$mean)
+```
+```{r}
+forecast(r_ar1ma1, h=10)$mean
+rmse(r.actual, forecast(r_ar1ma1, h=10)$mean)
+```
+
+```{r}
+p = c(tail(Price,1), forecast(p_arima113, h = 10)$mean)
+r_fc = log(p[2:11]/p[1:10])*100
+r_fc
+rmse(r.actual, r_fc)
+```
+```{r}
+p = c(tail(Price,1), forecast(p_arima311, h = 10)$mean)
+r_fc = log(p[2:11]/p[1:10])*100
+r_fc
+rmse(r.actual, r_fc)
+```
+```{r}
+p = c(tail(Price,1), forecast(p_arima313, h = 10)$mean)
+r_fc = log(p[2:11]/p[1:10])*100
+r_fc
+rmse(r.actual, r_fc)
+```
+
+
+

@@ -1,0 +1,246 @@
+---
+title: "TimeSeries"
+author: "Trần Đức Hiển - 11222280"
+date: "`r Sys.Date()`"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+
+```{r}
+library(tseries)
+library(ggplot2)
+library(urca)
+library(forecast)
+library(zoo)
+library(car)
+library(lmtest)
+library(Metrics)
+```
+
+```{r}
+setwd("C:/Users/admin/OneDrive - National Economics University/Tài liệu/Tài liệu ôn thi/TimeSeries/data")
+library(readxl)
+TSdata <- read_excel("TSdata.xlsx", sheet = "Finance")
+View(TSdata)
+TSdata = ts(TSdata, start = c(2010,1), frequency = 4)
+TSdata = na.omit(TSdata)
+Revenue = ts(TSdata[,3], start = c(2010,1), frequency = 4)
+Revenue1 = ts(TSdata[1:56,3], start = c(2010,1), frequency = 4)
+Revenue2 = ts(TSdata[57:60,3], start = c(2024,1), frequency = 4)
+```
+```{r}
+
+plot.ts(Revenue)
+boxplot(Revenue)
+ 
+```
+
+
+
+```{r}
+#1. Hoi quy mo hinh voi bien xu the
+#1.1.Lin-lin
+time <- seq_along(Revenue1)
+reg11 = lm(Revenue1~time)
+summary(reg11)
+rmse(Revenue2,predict(reg11, data = Revenue2)[1:4])
+mape(Revenue2,predict(reg11, data = Revenue2)[1:4])
+revf1 <- ts(fitted(reg11),start = c(2010,1), frequency = 4)
+plot.ts(Revenue)
+lines(revf1, col = "red")
+```
+```{r}
+#1.2.Lin-log
+reg12 = lm(Revenue1~log(time))
+summary(reg12)
+rmse(Revenue2,predict(reg12, data = Revenue2)[1:4])
+mape(Revenue2,predict(reg12, data = Revenue2)[1:4])
+revf2 <- ts(fitted(reg12),start = c(2010,1), frequency = 4)
+plot.ts(Revenue)
+lines(revf2, col = "red")
+```
+```{r}
+#1.3.Log-lin
+reg13 = lm(log(Revenue1)~time)
+summary(reg13)
+rmse(Revenue2,predict(reg13, data = Revenue2)[1:4])
+mape(Revenue2,predict(reg13, data = Revenue2)[1:4])
+revf3 <- ts(exp(fitted(reg13)),start = c(2010,1), frequency = 4)
+plot.ts(Revenue)
+lines(revf3, col = "red")
+```
+```{r}
+#1.3.log-log
+reg14 = lm(log(Revenue1)~log(time))
+summary(reg14)
+rmse(Revenue2,predict(reg14, data = Revenue2)[1:4])
+mape(Revenue2,predict(reg14, data = Revenue2)[1:4])
+revf4 <- ts(exp(fitted(reg14)),start = c(2010,1), frequency = 4)
+plot.ts(Revenue)
+lines(revf4, col = "red")
+```
+```{r}
+#Mo hinh lin-log su dung toan bo data den het 2024
+time1 <- seq_along(Revenue)
+reg15 = lm(Revenue~log(time1))
+summary(reg15)
+
+```
+
+
+
+```{r}
+#2.Hoi quy voi bien xu the va mua vu
+#2.1 Dang cong
+s1 <- c(rep(c(1,0,0,0), 14))				
+s2 <- c(rep(c(0,1,0,0), 14))
+s3 <- c(rep(c(0,0,1,0), 14))
+s4 <- c(rep(c(0,0,0,1), 14))
+reg21 = lm(Revenue1~log(time)+s2+s3+s4)
+summary(reg21)
+rmse(Revenue2,predict(reg21, data = Revenue2)[1:4])
+mape(Revenue2,predict(reg21, data = Revenue2)[1:4])
+revf5 <- ts(fitted(reg21),start = c(2010,1), frequency = 4)
+plot.ts(Revenue)
+lines(revf5, col = "red")
+```
+```{r}
+#2.2. Dang nhan
+reg22 = lm(Revenue1~log(time)+I(log(time)*s2)+I(log(time)*s3)+I(log(time)*s4))
+summary(reg22)
+rmse(Revenue2,predict(reg22, data = Revenue2)[1:4])
+mape(Revenue2,predict(reg22, data = Revenue2)[1:4])
+revf6 <- ts(fitted(reg22),start = c(2010,1), frequency = 4)
+plot.ts(Revenue)
+lines(revf6, col = "red")
+```
+```{r}
+#2.3 Ket hop cong va nhan
+reg23 = lm(Revenue1~log(time)+s2*log(time)+s3*log(time)+s4*log(time))
+summary(reg23)
+rmse(Revenue2,predict(reg23, data = Revenue2)[1:4])
+mape(Revenue2,predict(reg23, data = Revenue2)[1:4])
+revf7 <- ts(fitted(reg23),start = c(2010,1), frequency = 4)
+plot.ts(Revenue)
+lines(revf7, col = "red")
+```
+
+
+```{r}
+decom_revenue1 = decompose(Revenue1,type = "a")
+plot(decom_revenue1)
+```
+```{r}
+decom_revenue2 = decompose(Revenue1,type = "m")
+plot(decom_revenue2)
+```
+
+```{r}
+#Holtwinter dang cong
+hw.a = HoltWinters(Revenue1, seasonal = "a")
+hw.a
+rmse(Revenue2,predict(hw.a,n = 4))
+mape(Revenue2,predict(hw.a,n = 4))
+```
+```{r}
+#Holtwinter dang nhan
+hw.m = HoltWinters(Revenue1, seasonal = "m")
+hw.m
+rmse(Revenue2,predict(hw.m,n = 4))
+mape(Revenue2,predict(hw.m,n = 4))
+```
+```{r}
+hw.m1 = HoltWinters(Revenue, seasonal = "m")
+hw.m1
+predict(hw.m1, n = 4)
+```
+```{r}
+hw.m2 = HoltWinters(Revenue, seasonal = "a")
+hw.m2
+predict(hw.m2, n = 4)
+```
+
+
+```{r}
+setwd("C:/Users/admin/OneDrive - National Economics University/Tài liệu/Tài liệu ôn thi/TimeSeries/data")
+library(readxl)
+TSdata1 <- read_excel("TSdata.xlsx", sheet = "Stock_price")
+TSdata1 = ts(TSdata1, start = c(2023,1), frequency = 250)
+price = TSdata1[,1]
+log_return = TSdata1[,2]
+log_return = na.omit(log_return)
+```
+```{r}
+plot.ts(price)
+plot.ts(log_return)
+```
+
+
+```{r}
+summary(ur.df(price, type = "trend"))
+summary(ur.df(price, type = "drift"))
+summary(ur.df(diff(price), type = "trend"))
+summary(ur.df(diff(price), type = "drift"))
+summary(ur.df(diff(price), type = "none"))
+
+summary(ur.df(log_return, type = "none", selectlags = "AIC"))
+#Chuoi dung
+```
+```{r}
+acf(diff(price))
+pacf(diff(price))
+acf(log_return)
+pacf(log_return)
+```
+
+
+
+```{r}
+arima1 = arima(diff(price), order = c(1,0,1))
+arima1
+
+arima2 = arima(price, order = c(2,1,2))
+arima2
+
+price_pre = forecast(arima2, 10)
+price_pre
+realprice = c(18.9,19.3,19.15,18.75,18.1,18.4,18.15,17.9,18,17.9)
+rmse(price_pre$mean, realprice)
+
+
+arima21 = auto.arima(price, ic = "aic", test = "adf")
+summary(arima21)
+
+autoplot(arima2)
+```
+```{r}
+arima3 = arima(log_return, order = c(1,0,1))
+arima3
+
+arima4 = arima(log_return, order = c(2,1,2))
+arima4
+
+arima41 = auto.arima(log_return, ic = "aic", test = "adf")
+summary(arima41)
+
+log_return_pre = forecast(arima3, 10)
+log_return_pre
+price_pre2 = c(19.237,19.252,19.285,19.321,19.36,19.4,19.435,19.473,19.511,19.55)
+rmse(price_pre2, realprice)
+
+autoplot(arima3)
+```
+
+
+
+
